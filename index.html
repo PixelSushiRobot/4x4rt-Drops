@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="4x4rt Drops: an interactive pixel heart that pulses from wallet-seeded color stacks.">
+  <title>4x4rt Drops</title>
+  <style>
+    :root {
+      --ink: #1c1c1a;
+      --paper: #fce8ec;
+      --focus: #5b1026;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--paper);
+    }
+
+    body {
+      display: grid;
+      min-height: 100vh;
+      min-height: 100svh;
+      place-items: center;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      display: grid;
+      width: 100%;
+      min-height: 100vh;
+      min-height: 100svh;
+      place-items: center;
+      background: var(--paper);
+    }
+
+    figure {
+      width: min(100vmin, 100vw);
+      max-width: 100%;
+      aspect-ratio: 1;
+      margin: 0;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      outline: none;
+      shape-rendering: crispEdges;
+      touch-action: none;
+      user-select: none;
+    }
+
+    svg:focus-visible {
+      box-shadow: inset 0 0 0 10px var(--focus);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="art-title">
+    <h1 id="art-title" class="sr-only">4x4rt Drops</h1>
+    <figure aria-describedby="art-description">
+      <svg
+        id="artwork"
+        role="img"
+        tabindex="0"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 1000 1000"
+        aria-labelledby="svg-title svg-description"
+      >
+        <title id="svg-title">4x4rt Drops interactive heart</title>
+        <desc id="svg-description">
+          A blocky heart built from color stacks. Press or tap a block to charge it, then release to send a pulse through the heart.
+        </desc>
+      </svg>
+      <figcaption id="art-description" class="sr-only">
+        Press and hold any heart block to alter its color and release a wave through the artwork.
+      </figcaption>
+    </figure>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const INK = "#1c1c1a";
+      const PAPER = "#fce8ec";
+      const SIZE = 1000;
+      const CELL = 160;
+      const BORDER = 10;
+      const STEP = CELL - BORDER;
+      const HOLD_DURATION = 2000;
+      const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const CELLS = [
+        [1, 0], [3, 0],
+        [0, 1], [2, 1], [4, 1],
+        [1, 2], [3, 2],
+        [2, 3]
+      ];
+
+      const offsetX = Math.round((SIZE - (5 * CELL - 4 * BORDER)) / 2);
+      const offsetY = Math.round((SIZE - (4 * CELL - 3 * BORDER)) / 2);
+      const svg = document.getElementById("artwork");
+      const fillRects = new Map();
+      const hitAreas = new Map();
+
+      let baseColors = {};
+      let holdInterval = null;
+      let holdStart = 0;
+      let chargeAmount = 0;
+      let activeKey = null;
+      let activeTimers = [];
+      let pointerIsDown = false;
+
+      function getSeedSource() {
+        const params = new URLSearchParams(window.location.search);
+        const parts = [
+          params.get("viewer"),
+          params.get("wallet"),
+          params.get("address"),
+          params.get("creator"),
+          params.get("objkt"),
+          params.get("seed")
+        ].filter(Boolean);
+
+        return parts.length > 0
+          ? parts.join(":")
+          : "4x4rt-Drops:Art4LifeTez:PixelSushiRobot";
+      }
+
+      function xmur3(source) {
+        let h = 1779033703 ^ source.length;
+        for (let i = 0; i < source.length; i += 1) {
+          h = Math.imul(h ^ source.charCodeAt(i), 3432918353);
+          h = (h << 13) | (h >>> 19);
+        }
+        return () => {
+          h = Math.imul(h ^ (h >>> 16), 2246822507);
+          h = Math.imul(h ^ (h >>> 13), 3266489909);
+          return (h ^= h >>> 16) >>> 0;
+        };
+      }
+
+      function mulberry32(seed) {
+        return () => {
+          let t = seed += 0x6d2b79f5;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      const random = mulberry32(xmur3(getSeedSource())());
+
+      function cellX(col) {
+        return offsetX + col * STEP;
+      }
+
+      function cellY(row) {
+        return offsetY + row * STEP;
+      }
+
+      function hexToRgb(hex) {
+        const value = hex.replace("#", "");
+        return [
+          parseInt(value.slice(0, 2), 16),
+          parseInt(value.slice(2, 4), 16),
+          parseInt(value.slice(4, 6), 16)
+        ];
+      }
+
+      function rgbToHex(red, green, blue) {
+        return "#" + [red, green, blue]
+          .map((value) => Math.max(0, Math.min(255, Math.round(value))))
+          .map((value) => value.toString(16).padStart(2, "0"))
+          .join("");
+      }
+
+      function lerpColor(start, end, amount) {
+        const [startRed, startGreen, startBlue] = hexToRgb(start);
+        const [endRed, endGreen, endBlue] = hexToRgb(end);
+
+        return rgbToHex(
+          startRed + (endRed - startRed) * amount,
+          startGreen + (endGreen - startGreen) * amount,
+          startBlue + (endBlue - startBlue) * amount
+        );
+      }
+
+      function getLuminance(hex) {
+        const [red, green, blue] = hexToRgb(hex).map((value) => {
+          const channel = value / 255;
+          return channel <= 0.03928
+            ? channel / 12.92
+            : Math.pow((channel + 0.055) / 1.055, 2.4);
+        });
+
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+      }
+
+      function rand(min, max) {
+        return min + random() * (max - min);
+      }
+
+      function randomRedPink() {
+        const band = random();
+
+        if (band < 0.33) {
+          return rgbToHex(rand(140, 205), rand(8, 34), rand(16, 40));
+        }
+
+        if (band < 0.66) {
+          return rgbToHex(rand(190, 232), rand(55, 115), rand(80, 135));
+        }
+
+        return rgbToHex(rand(220, 248), rand(140, 188), rand(160, 208));
+      }
+
+      function generatePalette() {
+        return CELLS.reduce((colors, [col, row]) => {
+          colors[`${col},${row}`] = randomRedPink();
+          return colors;
+        }, {});
+      }
+
+      function averageLuminance(colors) {
+        const values = CELLS.map(([col, row]) => getLuminance(colors[`${col},${row}`]));
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+      }
+
+      function shiftColor(hex, goLighter) {
+        const [red, green, blue] = hexToRgb(hex);
+
+        if (goLighter) {
+          return rgbToHex(
+            red + (255 - red) * 0.45,
+            green + (255 - green) * 0.35,
+            blue + (255 - blue) * 0.3
+          );
+        }
+
+        return rgbToHex(red * 0.42, green * 0.35, blue * 0.35);
+      }
+
+      function createSvgElement(tagName, attributes = {}) {
+        const element = document.createElementNS(SVG_NS, tagName);
+        Object.entries(attributes).forEach(([name, value]) => {
+          element.setAttribute(name, String(value));
+        });
+        return element;
+      }
+
+      function addRect(attributes) {
+        const rect = createSvgElement("rect", attributes);
+        svg.appendChild(rect);
+        return rect;
+      }
+
+      function setFill(key, color) {
+        const rect = fillRects.get(key);
+        if (rect) {
+          rect.setAttribute("fill", color);
+        }
+      }
+
+      function cancelTimers() {
+        activeTimers.forEach((timer) => window.clearTimeout(timer));
+        activeTimers = [];
+      }
+
+      function fireWave(sourceCol, sourceRow, speed, goLighter) {
+        cancelTimers();
+
+        CELLS.forEach(([col, row]) => {
+          const key = `${col},${row}`;
+          const distance = Math.hypot(col - sourceCol, row - sourceRow);
+          const arriveDelay = REDUCED_MOTION ? 0 : Math.round(distance * speed);
+          const snapDelay = arriveDelay + (REDUCED_MOTION ? 120 : Math.round(speed * 1.2) + 180);
+
+          const arriveTimer = window.setTimeout(() => {
+            setFill(key, shiftColor(baseColors[key], goLighter));
+          }, arriveDelay);
+
+          const snapTimer = window.setTimeout(() => {
+            setFill(key, baseColors[key]);
+          }, snapDelay);
+
+          activeTimers.push(arriveTimer, snapTimer);
+        });
+      }
+
+      function startHold(col, row, key) {
+        if (pointerIsDown && activeKey === key) {
+          return;
+        }
+
+        cancelTimers();
+        pointerIsDown = true;
+        activeKey = key;
+        chargeAmount = 0;
+        holdStart = Date.now();
+
+        const goLighter = getLuminance(baseColors[key]) < 0.15;
+        window.clearInterval(holdInterval);
+
+        holdInterval = window.setInterval(() => {
+          chargeAmount = Math.min(1, (Date.now() - holdStart) / HOLD_DURATION);
+          setFill(key, lerpColor(baseColors[key], shiftColor(baseColors[key], goLighter), chargeAmount));
+        }, REDUCED_MOTION ? 80 : 30);
+      }
+
+      function releaseHold() {
+        if (holdInterval === null) {
+          pointerIsDown = false;
+          return;
+        }
+
+        window.clearInterval(holdInterval);
+        holdInterval = null;
+        pointerIsDown = false;
+
+        const key = activeKey;
+        const charge = chargeAmount;
+
+        activeKey = null;
+        chargeAmount = 0;
+
+        if (!key) {
+          return;
+        }
+
+        const [sourceCol, sourceRow] = key.split(",").map(Number);
+        const goLighter = getLuminance(baseColors[key]) < 0.15;
+
+        if (charge > 0.08) {
+          const newColor = lerpColor(baseColors[key], shiftColor(baseColors[key], goLighter), charge);
+          baseColors[key] = newColor;
+          setFill(key, newColor);
+        } else {
+          setFill(key, baseColors[key]);
+        }
+
+        const speed = charge > 0.08
+          ? Math.round(40 + (1 - charge) * 260)
+          : 300;
+
+        fireWave(sourceCol, sourceRow, speed, averageLuminance(baseColors) < 0.15);
+      }
+
+      function pulseFromKeyboard() {
+        const centerKey = "2,1";
+        startHold(2, 1, centerKey);
+        window.setTimeout(releaseHold, 260);
+      }
+
+      function buildArtwork() {
+        baseColors = generatePalette();
+        Array.from(svg.querySelectorAll("rect")).forEach((rect) => rect.remove());
+        fillRects.clear();
+        hitAreas.clear();
+
+        addRect({
+          x: 0,
+          y: 0,
+          width: SIZE,
+          height: SIZE,
+          fill: PAPER
+        });
+
+        CELLS.forEach(([col, row]) => {
+          const key = `${col},${row}`;
+          const x = cellX(col);
+          const y = cellY(row);
+
+          addRect({
+            x,
+            y,
+            width: CELL,
+            height: CELL,
+            fill: INK
+          });
+
+          fillRects.set(key, addRect({
+            x: x + BORDER,
+            y: y + BORDER,
+            width: CELL - BORDER * 2,
+            height: CELL - BORDER * 2,
+            fill: baseColors[key]
+          }));
+
+          const hitArea = addRect({
+            x,
+            y,
+            width: CELL,
+            height: CELL,
+            fill: "transparent",
+            "data-key": key,
+            "data-col": col,
+            "data-row": row
+          });
+
+          hitArea.style.cursor = "pointer";
+          hitAreas.set(key, hitArea);
+        });
+      }
+
+      svg.addEventListener("pointerdown", (event) => {
+        const target = event.target.closest("[data-key]");
+        if (!target) {
+          return;
+        }
+
+        event.preventDefault();
+        target.setPointerCapture(event.pointerId);
+        startHold(
+          Number(target.dataset.col),
+          Number(target.dataset.row),
+          target.dataset.key
+        );
+      });
+
+      svg.addEventListener("pointerup", releaseHold);
+      svg.addEventListener("pointercancel", releaseHold);
+      svg.addEventListener("pointerleave", releaseHold);
+
+      svg.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          pulseFromKeyboard();
+        }
+      });
+
+      buildArtwork();
+    })();
+  </script>
+</body>
+</html>
