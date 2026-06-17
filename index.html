@@ -1,15 +1,17 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="4x4rt Drops: an interactive pixel heart that pulses from wallet-seeded color stacks.">
-  <title>4x4rt Drops</title>
+    <meta name="description"
+      content="Interactive pixel heart for World Blood Donor Day: Art for Life — giving blood is giving life.">
+    <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
-      --ink: #1c1c1a;
-      --paper: #fce8ec;
-      --focus: #5b1026;
+      --ink: #2d1f1a;
+      --paper: #fff8f0;
+      --focus: #c44d34;
     }
 
     * {
@@ -79,21 +81,18 @@
     }
   </style>
 </head>
+
 <body>
   <main aria-labelledby="art-title">
-    <h1 id="art-title" class="sr-only">4x4rt Drops</h1>
+    <h1 id="art-title" class="sr-only">Art for Life — World Blood Donor Day</h1>
     <figure aria-describedby="art-description">
-      <svg
-        id="artwork"
-        role="img"
-        tabindex="0"
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 1000 1000"
-        aria-labelledby="svg-title svg-description"
-      >
-        <title id="svg-title">4x4rt Drops interactive heart</title>
+      <svg id="artwork" role="img" tabindex="0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"
+        aria-labelledby="svg-title svg-description">
+        <title id="svg-title">Art for Life — an interactive pixel heart</title>
         <desc id="svg-description">
-          A blocky heart built from color stacks. Press or tap a block to charge it, then release to send a pulse through the heart.
+          A warm, blocky heart built from life-giving colors.
+          Press and hold any block to charge it, then release to send a joyful pulse through the artwork.
+          Giving blood is giving life — celebrate World Blood Donor Day.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
@@ -107,8 +106,8 @@
       "use strict";
 
       const SVG_NS = "http://www.w3.org/2000/svg";
-      const INK = "#1c1c1a";
-      const PAPER = "#fce8ec";
+      const INK = "#2d1f1a";
+      const PAPER = "#fff8f0";
       const SIZE = 1000;
       const CELL = 160;
       const BORDER = 10;
@@ -223,27 +222,49 @@
         return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
       }
 
+      const WARM_DEEP = "#ff1f5c";
+      const WARM_CREAM = "#fce0eb";
+
+      function shiftColor(hex, goLighter) {
+        if (goLighter) {
+          return lerpColor(hex, WARM_DEEP, 0.45);
+        }
+        return lerpColor(hex, WARM_CREAM, 0.50);
+      }
+
       function rand(min, max) {
         return min + random() * (max - min);
       }
 
-      function randomRedPink() {
+      function randomBrightPink() {
         const band = random();
 
-        if (band < 0.33) {
-          return rgbToHex(rand(140, 205), rand(8, 34), rand(16, 40));
+        if (band < 0.30) {
+          return rgbToHex(rand(255, 255), rand(40, 105), rand(90, 150));
         }
 
-        if (band < 0.66) {
-          return rgbToHex(rand(190, 232), rand(55, 115), rand(80, 135));
+        if (band < 0.55) {
+          return rgbToHex(rand(255, 255), rand(80, 145), rand(130, 200));
         }
 
-        return rgbToHex(rand(220, 248), rand(140, 188), rand(160, 208));
+        if (band < 0.75) {
+          return rgbToHex(rand(255, 255), rand(120, 185), rand(160, 220));
+        }
+
+        if (band < 0.88) {
+          return rgbToHex(rand(255, 255), rand(75, 120), rand(105, 160));
+        }
+
+        if (band < 0.96) {
+          return rgbToHex(rand(255, 255), rand(100, 155), rand(80, 130));
+        }
+
+        return rgbToHex(rand(255, 255), rand(60, 110), rand(120, 175));
       }
 
       function generatePalette() {
         return CELLS.reduce((colors, [col, row]) => {
-          colors[`${col},${row}`] = randomRedPink();
+          colors[`${col},${row}`] = randomBrightPink();
           return colors;
         }, {});
       }
@@ -251,20 +272,6 @@
       function averageLuminance(colors) {
         const values = CELLS.map(([col, row]) => getLuminance(colors[`${col},${row}`]));
         return values.reduce((sum, value) => sum + value, 0) / values.length;
-      }
-
-      function shiftColor(hex, goLighter) {
-        const [red, green, blue] = hexToRgb(hex);
-
-        if (goLighter) {
-          return rgbToHex(
-            red + (255 - red) * 0.45,
-            green + (255 - green) * 0.35,
-            blue + (255 - blue) * 0.3
-          );
-        }
-
-        return rgbToHex(red * 0.42, green * 0.35, blue * 0.35);
       }
 
       function createSvgElement(tagName, attributes = {}) {
@@ -325,7 +332,7 @@
         chargeAmount = 0;
         holdStart = Date.now();
 
-        const goLighter = getLuminance(baseColors[key]) < 0.15;
+        const goLighter = getLuminance(baseColors[key]) < 0.20;
         window.clearInterval(holdInterval);
 
         holdInterval = window.setInterval(() => {
@@ -355,7 +362,7 @@
         }
 
         const [sourceCol, sourceRow] = key.split(",").map(Number);
-        const goLighter = getLuminance(baseColors[key]) < 0.15;
+        const goLighter = getLuminance(baseColors[key]) < 0.20;
 
         if (charge > 0.08) {
           const newColor = lerpColor(baseColors[key], shiftColor(baseColors[key], goLighter), charge);
@@ -369,15 +376,8 @@
           ? Math.round(40 + (1 - charge) * 260)
           : 300;
 
-        fireWave(sourceCol, sourceRow, speed, averageLuminance(baseColors) < 0.15);
+        fireWave(sourceCol, sourceRow, speed, averageLuminance(baseColors) < 0.20);
       }
-
-      function pulseFromKeyboard() {
-        const centerKey = "2,1";
-        startHold(2, 1, centerKey);
-        window.setTimeout(releaseHold, 260);
-      }
-
       function buildArtwork() {
         baseColors = generatePalette();
         Array.from(svg.querySelectorAll("rect")).forEach((rect) => rect.remove());
@@ -429,6 +429,8 @@
         });
       }
 
+      buildArtwork();
+
       svg.addEventListener("pointerdown", (event) => {
         const target = event.target.closest("[data-key]");
         if (!target) {
@@ -451,12 +453,19 @@
       svg.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          pulseFromKeyboard();
+          if (CELLS.length > 0) {
+            const centerCol = CELLS.reduce((s, [, r]) => s + r, 0) / CELLS.length;
+            const centerRow = CELLS.reduce((s, [, r]) => s + r, 0) / CELLS.length;
+            const nearest = CELLS.reduce((best, cell) => {
+              const d = Math.hypot(cell[1] - centerRow, cell[0] - centerCol);
+              return d < best.dist ? { cell, dist: d } : best;
+            }, { cell: CELLS[0], dist: Infinity }).cell;
+            fireWave(nearest[0], nearest[1], 180, averageLuminance(baseColors) < 0.20);
+          }
         }
       });
-
-      buildArtwork();
-    })();
+    }) ();
   </script>
 </body>
+
 </html>
