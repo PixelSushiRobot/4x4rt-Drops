@@ -4,9 +4,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description"
-      content="Interactive pixel heart for World Blood Donor Day: Art for Life — giving blood is giving life.">
-    <title>Art for Life — World Blood Donor Day</title>
+  <meta name="description"
+    content="Interactive pixel heart for World Blood Donor Day: Art for Life — giving blood is giving life.">
+  <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
       --ink: #2d1f1a;
@@ -76,8 +76,6 @@
       margin: -1px;
       overflow: hidden;
       clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
     }
   </style>
 </head>
@@ -211,67 +209,70 @@
         );
       }
 
-      function getLuminance(hex) {
-        const [red, green, blue] = hexToRgb(hex).map((value) => {
-          const channel = value / 255;
-          return channel <= 0.03928
-            ? channel / 12.92
-            : Math.pow((channel + 0.055) / 1.055, 2.4);
-        });
+      /**
+       * CRITICAL COLOR RE-ENGINEERING:
+       * Instead of mixing hexes (which creates mud/brown), we directly recalculate
+       * the RGB channels based on pure Red laws. Green and Blue are hard-capped low
+       * to stay completely away from pink, orange, or brown.
+       */
 
-        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+      // Donating cell empties out, spiking into an un-diluted pure electric neon red
+      function giveLifeShift(hex, amount = 1) {
+        const [r, g, b] = hexToRgb(hex);
+        // Push Red straight to the maximum ceil, drop green/blue to clean laser floors
+        const targetR = r + (255 - r) * amount;
+        const targetG = g * (1 - amount);
+        const targetB = b * (1 - amount);
+        return rgbToHex(targetR, targetG, targetB);
       }
 
-      const WARM_DEEP = "#ff1f5c";
-      const WARM_CREAM = "#fce0eb";
+      // Absorbing cell packs in the blood, dropping the red channel low, 
+      // but completely draining green/blue to maintain pristine crimson saturation.
+      function absorbLifeShift(hex, amount) {
+        const [r, g, b] = hexToRgb(hex);
 
-      function shiftColor(hex, goLighter) {
-        if (goLighter) {
-          return lerpColor(hex, WARM_DEEP, 0.45);
-        }
-        return lerpColor(hex, WARM_CREAM, 0.50);
+        // Drop the red channel down to form a rich dark blood tone (capped at floor 65)
+        const targetR = Math.max(65, r - (r - 65) * amount * 0.65);
+        // Aggressively wipe green and blue to protect the pure red tone from rotting into brown
+        const targetG = Math.max(0, g - (g * amount * 0.9));
+        const targetB = Math.max(0, b - (b * amount * 0.9));
+
+        return rgbToHex(targetR, targetG, targetB);
       }
 
       function rand(min, max) {
         return min + random() * (max - min);
       }
 
-      function randomBrightPink() {
+      // Initialized seeds generate gorgeous balanced ranges of bright and velvet reds
+      function randomBrightRed() {
         const band = random();
 
-        if (band < 0.30) {
-          return rgbToHex(rand(255, 255), rand(40, 105), rand(90, 150));
+        // 1. Pure Electric Red
+        if (band < 0.20) {
+          return rgbToHex(rand(245, 255), 0, 0);
         }
-
-        if (band < 0.55) {
-          return rgbToHex(rand(255, 255), rand(80, 145), rand(130, 200));
+        // 2. Ruby Mid-Tone Red
+        if (band < 0.40) {
+          return rgbToHex(rand(210, 235), 0, rand(4, 10));
         }
-
-        if (band < 0.75) {
-          return rgbToHex(rand(255, 255), rand(120, 185), rand(160, 220));
+        // 3. Deep Velvet Crimson
+        if (band < 0.60) {
+          return rgbToHex(rand(140, 175), 0, rand(4, 8));
         }
-
-        if (band < 0.88) {
-          return rgbToHex(rand(255, 255), rand(75, 120), rand(105, 160));
+        // 4. Heavy Blood Maroon
+        if (band < 0.80) {
+          return rgbToHex(rand(95, 130), 0, rand(2, 6));
         }
-
-        if (band < 0.96) {
-          return rgbToHex(rand(255, 255), rand(100, 155), rand(80, 130));
-        }
-
-        return rgbToHex(rand(255, 255), rand(60, 110), rand(120, 175));
+        // 5. Vivid Cherry
+        return rgbToHex(rand(235, 255), rand(2, 8), rand(4, 12));
       }
 
       function generatePalette() {
         return CELLS.reduce((colors, [col, row]) => {
-          colors[`${col},${row}`] = randomBrightPink();
+          colors[`${col},${row}`] = randomBrightRed();
           return colors;
         }, {});
-      }
-
-      function averageLuminance(colors) {
-        const values = CELLS.map(([col, row]) => getLuminance(colors[`${col},${row}`]));
-        return values.reduce((sum, value) => sum + value, 0) / values.length;
       }
 
       function createSvgElement(tagName, attributes = {}) {
@@ -300,21 +301,33 @@
         activeTimers = [];
       }
 
-      function fireWave(sourceCol, sourceRow, speed, goLighter) {
+      function fireDonationWave(sourceCol, sourceRow, speed, charge) {
         cancelTimers();
+        const donationImpact = Math.max(0.20, charge);
 
         CELLS.forEach(([col, row]) => {
           const key = `${col},${row}`;
+
+          if (col === sourceCol && row === sourceRow) {
+            return;
+          }
+
           const distance = Math.hypot(col - sourceCol, row - sourceRow);
           const arriveDelay = REDUCED_MOTION ? 0 : Math.round(distance * speed);
-          const snapDelay = arriveDelay + (REDUCED_MOTION ? 120 : Math.round(speed * 1.2) + 180);
+          const flashDuration = REDUCED_MOTION ? 120 : Math.round(speed * 1.2) + 120;
+          const snapDelay = arriveDelay + flashDuration;
 
           const arriveTimer = window.setTimeout(() => {
-            setFill(key, shiftColor(baseColors[key], goLighter));
+            // Flash color curves deep down during wave front passage
+            const waveColor = absorbLifeShift(baseColors[key], donationImpact * 1.4);
+            setFill(key, waveColor);
           }, arriveDelay);
 
           const snapTimer = window.setTimeout(() => {
-            setFill(key, baseColors[key]);
+            // Commit permanent absorption shifts securely
+            const finalDarkerColor = absorbLifeShift(baseColors[key], donationImpact);
+            baseColors[key] = finalDarkerColor;
+            setFill(key, finalDarkerColor);
           }, snapDelay);
 
           activeTimers.push(arriveTimer, snapTimer);
@@ -332,12 +345,11 @@
         chargeAmount = 0;
         holdStart = Date.now();
 
-        const goLighter = getLuminance(baseColors[key]) < 0.20;
         window.clearInterval(holdInterval);
 
         holdInterval = window.setInterval(() => {
           chargeAmount = Math.min(1, (Date.now() - holdStart) / HOLD_DURATION);
-          setFill(key, lerpColor(baseColors[key], shiftColor(baseColors[key], goLighter), chargeAmount));
+          setFill(key, giveLifeShift(baseColors[key], chargeAmount));
         }, REDUCED_MOTION ? 80 : 30);
       }
 
@@ -362,22 +374,15 @@
         }
 
         const [sourceCol, sourceRow] = key.split(",").map(Number);
-        const goLighter = getLuminance(baseColors[key]) < 0.20;
 
-        if (charge > 0.08) {
-          const newColor = lerpColor(baseColors[key], shiftColor(baseColors[key], goLighter), charge);
-          baseColors[key] = newColor;
-          setFill(key, newColor);
-        } else {
-          setFill(key, baseColors[key]);
-        }
+        // Lock donor cell cleanly into maximum electric brightness
+        const finalDonorColor = giveLifeShift(baseColors[key], Math.max(0.20, charge));
+        baseColors[key] = finalDonorColor;
+        setFill(key, finalDonorColor);
 
-        const speed = charge > 0.08
-          ? Math.round(40 + (1 - charge) * 260)
-          : 300;
-
-        fireWave(sourceCol, sourceRow, speed, averageLuminance(baseColors) < 0.20);
+        fireDonationWave(sourceCol, sourceRow, 45, charge);
       }
+
       function buildArtwork() {
         baseColors = generatePalette();
         Array.from(svg.querySelectorAll("rect")).forEach((rect) => rect.remove());
@@ -460,11 +465,17 @@
               const d = Math.hypot(cell[1] - centerRow, cell[0] - centerCol);
               return d < best.dist ? { cell, dist: d } : best;
             }, { cell: CELLS[0], dist: Infinity }).cell;
-            fireWave(nearest[0], nearest[1], 180, averageLuminance(baseColors) < 0.20);
+
+            const keyKey = `${nearest[0]},${nearest[1]}`;
+            const keyDonorColor = giveLifeShift(baseColors[keyKey], 0.5);
+            baseColors[keyKey] = keyDonorColor;
+            setFill(keyKey, keyDonorColor);
+
+            fireDonationWave(nearest[0], nearest[1], 45, 0.4);
           }
         }
       });
-    }) ();
+    })();
   </script>
 </body>
 
