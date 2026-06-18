@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with an extended epic celebration sequence.">
+    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with a continuous fluid double celebration sequence.">
   <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
@@ -93,13 +93,13 @@
         <title id="svg-title">Art for Life — an instant-response liquid pixel heart</title>
         <desc id="svg-description">
           A pure-red pixel heart balancing lightness like fluid.
-          Press and hold any block to drain it to the canvas background color. Balance all cell colors to trigger an
-          epic celebration wave.
+          Press and hold any block to drain it to the canvas background color. Balance all cell colors to trigger a
+          continuous double celebration wave.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
         Press and hold any heart block to drain its redness down to the canvas color. Balancing all blocks to roughly
-        the same shade triggers a dramatic, prolonged success reset animation.
+        the same shade triggers a continuous double outward wave reset animation.
       </figcaption>
     </figure>
   </main>
@@ -122,8 +122,8 @@
       const MIN_L = 8;     // Rich deep crimson blood
       const MAX_L = 97;    // Fully drained capacity limit
 
-      // Maximum allowed variation difference between highest and lowest cell lightness to count as "balanced"
-      const BALANCE_THRESHOLD = 7.0;
+      // Dynamic Balance Tolerance Span 
+      const BALANCE_THRESHOLD = 11.5;
 
       // High-visibility wave color matching the background canvas paper color
       const WAVE_FLASH_COLOR = PAPER;
@@ -220,6 +220,7 @@
         }
       }
 
+      // Dynamic directly applied coloring mapping helper
       function setRawFillColor(key, cssColor) {
         const rect = fillRects.get(key);
         if (rect) {
@@ -291,32 +292,61 @@
         const centerCol = 2;
         const centerRow = 1.5;
 
+        // Visual orchestration parameters for balanced state
+        const waveSpeed = 160;
+        const wave2Delay = 200; // Separation offset between wave 1 and wave 2
+        const colorHoldDuration = 180; // How long each block flashes its color before changing to the next step
+
+        // Generate the new upcoming palette ahead of time so cells can smoothly shift straight to it
+        randomSeedValue = Math.random();
+        random = mulberry32(xmur3(getSeedSource())());
+
+        // Temporarily store the new targets without overriding current states yet
+        const nextStates = {};
+        CELLS.forEach(([col, row]) => {
+          nextStates[`${col},${row}`] = MIN_L + random() * (80 - MIN_L);
+        });
+
         CELLS.forEach(([col, row]) => {
           const key = `${col},${row}`;
           const distance = Math.hypot(col - centerCol, row - centerRow);
 
-          // SIGNIFICANTLY LENGTHENED SECTIONS:
-          // Slower, grander ripple outward delay step + substantially longer white void hang time
-          const waveArrival = REDUCED_MOTION ? 0 : Math.round(distance * 240);
-          const flashDuration = REDUCED_MOTION ? 400 : 1400;
+          // Continuous timeline calculations (No static lingering delays)
+          const t1_arrive = REDUCED_MOTION ? 0 : Math.round(distance * waveSpeed);
+          const t1_fade = t1_arrive + colorHoldDuration;
 
-          // Outward propagation flash to white canvas void space
-          const flashOnTimer = window.setTimeout(() => {
+          const t2_arrive = t1_fade + wave2Delay;
+          const t2_collapse = t2_arrive + colorHoldDuration;
+
+          // --- WAVE 1: Pure White Shockwave ---
+          const w1OnTimer = window.setTimeout(() => {
             setRawFillColor(key, "#ffffff");
-          }, waveArrival);
+          }, t1_arrive);
 
-          // Return transition point: Re-seed configuration parameters and snap back to organic values
-          const flashOffTimer = window.setTimeout(() => {
+          // Wave 1 trailing edge: Briefly blend with high-contrast ink frame values
+          const w1ClearTimer = window.setTimeout(() => {
+            setRawFillColor(key, "rgba(45, 31, 26, 0.18)");
+          }, t1_fade);
+
+          // --- WAVE 2: Paper Shockwave ---
+          const w2OnTimer = window.setTimeout(() => {
+            setRawFillColor(key, PAPER);
+          }, t2_arrive);
+
+          // --- CONTINUOUS COLLAPSE RESET ---
+          // Instead of waiting, cells directly transition back to their fresh randomized colors in a continuous wave
+          const collapseTimer = window.setTimeout(() => {
+            cellStates[key] = nextStates[key];
+            targetStates[key] = nextStates[key];
+            setFill(key, cellStates[key]);
+
+            // If this is the final block in the calculation index sequence, safely restore user interaction flag
             if (key === `${CELLS[CELLS.length - 1][0]},${CELLS[CELLS.length - 1][1]}`) {
-              randomSeedValue = Math.random();
-              random = mulberry32(xmur3(getSeedSource())());
-              generatePalette();
               isCelebrating = false;
             }
-            setFill(key, cellStates[key]);
-          }, waveArrival + flashDuration);
+          }, t2_collapse);
 
-          successTimers.push(flashOnTimer, flashOffTimer);
+          successTimers.push(w1OnTimer, w1ClearTimer, w2OnTimer, collapseTimer);
         });
       }
 
