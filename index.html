@@ -91,6 +91,7 @@
       opacity: 1;
     }
 
+    /* Default to hidden per the 'I' shortcut requirements */
     .ui-layer.ui-hidden {
       opacity: 0;
     }
@@ -106,15 +107,13 @@
       letter-spacing: 0.1cqw;
     }
 
-    /* 15pt maps elegantly to 1.5cqw based on the 1000px scale bounds */
     .project-header .label {
       font-size: 1.5cqw;
       font-weight: 400;
       margin-bottom: 0.4cqw;
-      /* Updated precise line spacing */
+      /* Precise 4px line gap context */
     }
 
-    /* 30pt maps to 3cqw */
     .project-header .title {
       font-size: 3cqw;
       font-weight: 400;
@@ -124,11 +123,9 @@
     .watermark-container {
       position: absolute;
       bottom: 2cqw;
-      /* 20px dynamic baseline padding */
       right: 2cqw;
       width: 9cqw;
       height: 3cqw;
-      /* Keeps 90x30 aspect ratio */
     }
 
     .watermark-container svg {
@@ -158,19 +155,14 @@
 <body>
   <main aria-labelledby="art-title">
     <h1 id="art-title" class="sr-only">4x4rt Drops — #Art4LifeTez</h1>
+
     <figure aria-describedby="art-description">
 
       <svg id="artwork" role="img" tabindex="0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"
-        aria-labelledby="svg-title svg-description">
-        <title id="svg-title">4x4rt Drops — Fluid resource-preservation balance engine</title>
-        <desc id="svg-description">
-          A liquid pixel heart constructed from exactly 16 blocks total.
-          Press and hold blocks to drain redness away into the matching canvas color. Equalize all blocks to trigger a
-          continuous double celebration shockwave.
-        </desc>
+        aria-label="4x4rt Drops — Interactive Pixel Heart Color Game">
       </svg>
 
-      <div id="ui-overlay" class="ui-layer" aria-hidden="true">
+      <div id="ui-overlay" class="ui-layer ui-hidden" aria-hidden="true">
         <div class="project-header">
           <div class="label">PROJECT</div>
           <div class="title">4X4RT DROPS</div>
@@ -200,8 +192,9 @@
       </div>
 
       <figcaption id="art-description" class="sr-only">
-        Press and hold blocks to bleed out values. Balancing all blocks to matching lightness values initializes a
-        continuous double wave reset loop.
+        An interactive puzzle of a pixel heart made from 16 interlocking blocks. Press and hold individual blocks to
+        shift their red color level. Balance all blocks to an equal color value to complete the puzzle and automatically
+        load a new random board.
       </figcaption>
     </figure>
   </main>
@@ -251,8 +244,12 @@
       let initialDonorL = 0;
       let accumulatedGainedPool = 0;
       let continuousPlaySeedShift = null;
+      let forcedRandomSession = null;
 
       function getSeedSource() {
+        if (forcedRandomSession !== null) {
+          return `4x4rt-Drops:Art4LifeTez:ForcedRandomSession:${forcedRandomSession}`;
+        }
         if (continuousPlaySeedShift !== null) {
           return `4x4rt-Drops:Art4LifeTez:NextSession:${continuousPlaySeedShift}`;
         }
@@ -301,7 +298,6 @@
       function cellX(col) { return offsetX + col * STEP; }
       function cellY(row) { return offsetY + row * STEP; }
 
-      // Dynamic directly applied lightness color parser
       function getCellColorString(L) {
         if (L >= MAX_L) {
           return PAPER;
@@ -322,7 +318,6 @@
         }
       }
 
-      // Applied raw style color injector
       function setRawFillColor(key, cssColor) {
         const rect = fillRects.get(key);
         if (rect) {
@@ -412,7 +407,6 @@
           const t2_arrive = t1_fade + wave2Delay;
           const t2_collapse = t2_arrive + colorHoldDuration;
 
-          // --- WAVE 1 ---
           const w1OnTimer = window.setTimeout(() => {
             setRawFillColor(key, "#ffffff");
           }, t1_arrive);
@@ -421,12 +415,10 @@
             setRawFillColor(key, "rgba(45, 31, 26, 0.18)");
           }, t1_fade);
 
-          // --- WAVE 2 ---
           const w2OnTimer = window.setTimeout(() => {
             setRawFillColor(key, PAPER);
           }, t2_arrive);
 
-          // --- FLUID RESYNC ---
           const collapseTimer = window.setTimeout(() => {
             cellStates[key] = nextStates[key];
             targetStates[key] = nextStates[key];
@@ -573,7 +565,6 @@
           const x = cellX(col);
           const y = cellY(row);
 
-          // Ink Frames (8 blocks)
           addRect({
             x,
             y,
@@ -582,7 +573,6 @@
             fill: INK
           });
 
-          // Dynamic cores (8 blocks = 16 blocks architectural grid layout payload)
           fillRects.set(key, addRect({
             x: x + BORDER,
             y: y + BORDER,
@@ -591,7 +581,6 @@
             fill: getCellColorString(cellStates[key])
           }));
 
-          // Direct UI Input Hitboxes
           addRect({
             x,
             y,
@@ -603,6 +592,57 @@
             "data-row": row
           });
         });
+      }
+
+      // --- ADVANCED TOOLKIT EXPORT PIPELINES ---
+      function downloadPngExport() {
+        const outputCanvasSize = 2000;
+        const scaleFactor = outputCanvasSize / SIZE;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = outputCanvasSize;
+        canvas.height = outputCanvasSize;
+        const ctx = canvas.getContext("2d");
+
+        ctx.fillStyle = PAPER;
+        ctx.fillRect(0, 0, outputCanvasSize, outputCanvasSize);
+
+        CELLS.forEach(([col, row]) => {
+          const key = `${col},${row}`;
+          const x = cellX(col) * scaleFactor;
+          const y = cellY(row) * scaleFactor;
+          const w = CELL * scaleFactor;
+          const borderOffset = BORDER * scaleFactor;
+
+          ctx.fillStyle = INK;
+          ctx.fillRect(x, y, w, w);
+
+          const elementStyleColor = fillRects.get(key).getAttribute("fill");
+          ctx.fillStyle = elementStyleColor;
+          ctx.fillRect(x + borderOffset, y + borderOffset, w - borderOffset * 2, w - borderOffset * 2);
+        });
+
+        const link = document.createElement("a");
+        link.download = "4x4rt_drops.png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      }
+
+      function downloadSvgExport() {
+        const svgClone = svg.cloneNode(true);
+        svgClone.removeAttribute("tabindex");
+        svgClone.removeAttribute("id");
+
+        const svgSerializerString = new XMLSerializer().serializeToString(svgClone);
+        const dataBlob = new Blob([svgSerializerString], { type: "image/svg+xml;charset=utf-8" });
+        const objectBlobUrl = URL.createObjectURL(dataBlob);
+
+        const link = document.createElement("a");
+        link.download = "4x4rt_drops.svg";
+        link.href = objectBlobUrl;
+        link.click();
+
+        window.setTimeout(() => URL.revokeObjectURL(objectBlobUrl), 10);
       }
 
       buildArtwork();
@@ -624,15 +664,54 @@
       svg.addEventListener("pointercancel", releaseHold);
       svg.addEventListener("pointerleave", releaseHold);
 
-      // Unified Global Keyboard Inputs Handler
+      // Global Keydown Router Integration
       svg.addEventListener("keydown", (event) => {
-        // Toggle shortcut display layer mapping
-        if (event.key === "h" || event.key === "H") {
+        if (event.metaKey || event.ctrlKey) {
+          return;
+        }
+
+        const shortcutInputKey = event.key.toLowerCase();
+
+        // 1. Toggle Project Meta Visibility ('i')
+        if (shortcutInputKey === "i") {
           event.preventDefault();
           uiOverlay.classList.toggle("ui-hidden");
           return;
         }
 
+        // 2. Force True Randomized Generation Bypass Sequence ('r')
+        if (shortcutInputKey === "r") {
+          event.preventDefault();
+
+          activeTimers.forEach((timer) => window.clearTimeout(timer));
+          successTimers.forEach((timer) => window.clearTimeout(timer));
+          window.clearInterval(holdInterval);
+
+          isCelebrating = false;
+          pointerIsDown = false;
+          activeKey = null;
+
+          forcedRandomSession = Math.random();
+          prng = mulberry32(xmur3(getSeedSource())());
+          buildArtwork();
+          return;
+        }
+
+        // 3. High-res Raster 2000x2000 PNG Downloader Export Link ('p')
+        if (shortcutInputKey === "p") {
+          event.preventDefault();
+          downloadPngExport();
+          return;
+        }
+
+        // 4. Standalone Vector 1000x1000 SVG Export Link ('s')
+        if (shortcutInputKey === "s") {
+          event.preventDefault();
+          downloadSvgExport();
+          return;
+        }
+
+        // 5. Classic Interactive Click Simulation Actions Target Handlers
         if (isCelebrating) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
