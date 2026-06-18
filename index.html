@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with paper-contrast waves.">
+    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with snappy ink-contrast waves.">
   <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
@@ -90,16 +90,16 @@
     <figure aria-describedby="art-description">
       <svg id="artwork" role="img" tabindex="0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"
         aria-labelledby="svg-title svg-description">
-        <title id="svg-title">Art for Life — a paper-contrast liquid pixel heart</title>
+        <title id="svg-title">Art for Life — an instant-response liquid pixel heart</title>
         <desc id="svg-description">
           A pure-red pixel heart balancing lightness like fluid.
           Press and hold any block to drain it to the canvas background color, sending a paper-colored ripple wave
-          across the heart.
+          instantly across the heart.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
         Press and hold any heart block to completely drain its redness down to the canvas color, pulling blood away from
-        other cells via a paper-colored wave.
+        other cells via an immediate paper-colored wave.
       </figcaption>
     </figure>
   </main>
@@ -139,6 +139,7 @@
 
       // State Trackers
       let cellStates = {};
+      let targetStates = {};
       let holdInterval = null;
       let holdStart = 0;
       let activeKey = null;
@@ -158,7 +159,6 @@
           params.get("seed")
         ].filter(Boolean);
 
-        // If URL parameters are present, use them. Otherwise, generate a fresh random seed string on every reload.
         if (parts.length > 0) {
           return parts.join(":");
         } else {
@@ -197,10 +197,9 @@
       // Custom structural rendering engine to transform red lightness into background canvas values as it empties
       function getCellColorString(L) {
         if (L >= MAX_L) {
-          return PAPER; // Perfect transparency match at empty state limit
+          return PAPER;
         }
         if (L > 85) {
-          // Progressively lean towards the warm linen tint of the canvas background (#fff8f0) instead of pure white
           const factor = (L - 85) / (MAX_L - 85);
           const currentHue = Math.round(0 + (34 * factor));
           const currentLightness = (85 + (12 * factor)).toFixed(1);
@@ -223,12 +222,26 @@
         }
       }
 
+      // Synchronous Instant Catch-up Switch:
+      // Clears running animation timeouts and updates data states to true target values instantly.
+      function settleAllCellsNow() {
+        activeTimers.forEach((timer) => window.clearTimeout(timer));
+        activeTimers = [];
+
+        Object.keys(targetStates).forEach((key) => {
+          cellStates[key] = targetStates[key];
+          setFill(key, cellStates[key]);
+        });
+
+        targetStates = { ...cellStates };
+      }
+
       function generatePalette() {
         CELLS.forEach(([col, row]) => {
           const key = `${col},${row}`;
-          // Generate completely randomized initial red lightness states spanning a wide spectrum using our reload seed
           cellStates[key] = MIN_L + random() * (80 - MIN_L);
         });
+        targetStates = { ...cellStates };
       }
 
       function createSvgElement(tagName, attributes = {}) {
@@ -245,18 +258,12 @@
         return rect;
       }
 
-      function cancelTimers() {
-        activeTimers.forEach((timer) => window.clearTimeout(timer));
-        activeTimers = [];
-      }
-
-      function fireDrainageWave(sourceCol, sourceRow, speed, finalGainedPool) {
-        cancelTimers();
-
-        const recipientCells = CELLS.filter(([col, row]) => `${col},${row}` !== activeKey);
+      function fireDrainageWave(sourceCol, sourceRow, speed, finalGainedPool, sourceKey) {
+        // Find recipient heart blocks
+        const recipientCells = CELLS.filter(([col, row]) => `${col},${row}` !== sourceKey);
         if (recipientCells.length === 0) return;
 
-        // Resource Conservation Law: Split the total lightness gained evenly as a loss from others
+        // Resource Conservation Breakdown
         const tollPerRecipient = finalGainedPool / recipientCells.length;
 
         recipientCells.forEach(([col, row]) => {
@@ -270,13 +277,15 @@
           const startL = cellStates[key];
           const targetL = Math.max(MIN_L, startL - tollPerRecipient);
 
+          // Update future target tracking instantly so click over-runs catch up cleanly
+          targetStates[key] = targetL;
+
           // Paper Wave Arrival
           const arriveTimer = window.setTimeout(() => {
-            // Flash paper color across the ripple front to simulate an empty void pulse
             setRawFillColor(key, WAVE_FLASH_COLOR);
           }, arriveDelay);
 
-          // Settle securely into the newly calculated value
+          // Settle securely into the final state
           const snapTimer = window.setTimeout(() => {
             cellStates[key] = targetL;
             setFill(key, targetL);
@@ -287,31 +296,43 @@
       }
 
       function startHold(col, row, key) {
+        // CRITICAL: Catch up any previous wave animation instantly.
+        // This stops rapid clicks from piling up half-finished animations.
+        settleAllCellsNow();
+
         if (pointerIsDown && activeKey === key) return;
 
-        cancelTimers();
         pointerIsDown = true;
         activeKey = key;
         holdStart = Date.now();
         initialDonorL = cellStates[key];
         accumulatedGainedPool = 0;
 
-        window.clearInterval(holdInterval);
+        // Give single clicks an instant, reactive feedback step right away on down press
+        const instantClickStep = (MAX_L - initialDonorL) * 0.12;
+        let steppedL = initialDonorL + instantClickStep;
+        if (steppedL > MAX_L) steppedL = MAX_L;
 
+        accumulatedGainedPool = steppedL - initialDonorL;
+        cellStates[key] = steppedL;
+        targetStates[key] = steppedL;
+        setFill(key, steppedL);
+
+        // Setup interval to continue draining smoothly if user transitions click into a long-press hold
+        window.clearInterval(holdInterval);
         holdInterval = window.setInterval(() => {
           const elapsed = Date.now() - holdStart;
           const progress = Math.min(1, elapsed / HOLD_DURATION);
 
-          // Drive cleanly up to the transparency ceiling
-          const maxGrowthHeadroom = MAX_L - initialDonorL;
+          const maxGrowthHeadroom = MAX_L - steppedL;
           const currentGainTarget = maxGrowthHeadroom * progress;
 
-          let updatedDonorL = initialDonorL + currentGainTarget;
+          let updatedDonorL = steppedL + currentGainTarget;
           if (updatedDonorL > MAX_L) updatedDonorL = MAX_L;
 
-          // Track fluid transaction
           accumulatedGainedPool = updatedDonorL - initialDonorL;
           cellStates[key] = updatedDonorL;
+          targetStates[key] = updatedDonorL;
           setFill(key, updatedDonorL);
 
           if (progress >= 1) {
@@ -334,8 +355,9 @@
 
         const [sourceCol, sourceRow] = key.split(",").map(Number);
 
+        // Unleash wave calculation instantly to keep regular clicking incredibly snappy
         if (totalGained > 0) {
-          fireDrainageWave(sourceCol, sourceRow, 45, totalGained);
+          fireDrainageWave(sourceCol, sourceRow, 45, totalGained, key);
         }
 
         activeKey = null;
@@ -379,7 +401,7 @@
             fill: getCellColorString(cellStates[key])
           }));
 
-          // Interactive Pointer Hit-Box (Only these elements get pointer cursors via CSS)
+          // Interactive Pointer Hit-Box (Only active pixels receive the hit cursor)
           addRect({
             x,
             y,
@@ -421,18 +443,19 @@
             const randomCell = CELLS[Math.floor(random() * CELLS.length)];
             const key = `${randomCell[0]},${randomCell[1]}`;
 
-            activeKey = key;
+            settleAllCellsNow();
+
             const currentL = cellStates[key];
             const capacity = MAX_L - currentL;
-            const stepGain = capacity * 0.60;
+            const stepGain = capacity * 0.40;
             const finalDonorL = Math.min(MAX_L, currentL + stepGain);
             const absoluteGained = finalDonorL - currentL;
 
             cellStates[key] = finalDonorL;
+            targetStates[key] = finalDonorL;
             setFill(key, finalDonorL);
 
-            fireDrainageWave(randomCell[0], randomCell[1], 45, absoluteGained);
-            activeKey = null;
+            fireDrainageWave(randomCell[0], randomCell[1], 45, absoluteGained, key);
           }
         }
       });
