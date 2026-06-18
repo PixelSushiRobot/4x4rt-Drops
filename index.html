@@ -206,6 +206,7 @@
       const SVG_NS = "http://www.w3.org/2000/svg";
       const INK = "#2d1f1a";
       const PAPER = "#fff8f0";
+      const INK_MUTED = "rgba(45, 31, 26, 0.18)";
       const SIZE = 1000;
 
       // Updated layout dimensional matrix configs
@@ -249,6 +250,7 @@
       let accumulatedGainedPool = 0;
       let continuousPlaySeedShift = null;
       let forcedRandomSession = null;
+      let svgFocused = false;
 
       function getSeedSource() {
         if (forcedRandomSession !== null) {
@@ -393,6 +395,7 @@
         const wave2Delay = 200;
         const colorHoldDuration = 180;
 
+        forcedRandomSession = null;
         continuousPlaySeedShift = Math.random();
         prng = mulberry32(xmur3(getSeedSource())());
 
@@ -416,7 +419,7 @@
           }, t1_arrive);
 
           const w1ClearTimer = window.setTimeout(() => {
-            setRawFillColor(key, "rgba(45, 31, 26, 0.18)");
+            setRawFillColor(key, INK_MUTED);
           }, t1_fade);
 
           const w2OnTimer = window.setTimeout(() => {
@@ -649,6 +652,11 @@
         window.setTimeout(() => URL.revokeObjectURL(objectBlobUrl), 10);
       }
 
+      function toggleUiOverlay() {
+        const hidden = uiOverlay.classList.toggle("ui-hidden");
+        uiOverlay.setAttribute("aria-hidden", hidden ? "true" : "false");
+      }
+
       buildArtwork();
 
       svg.addEventListener("pointerdown", (event) => {
@@ -656,6 +664,10 @@
         if (!target) return;
 
         event.preventDefault();
+        if (!svgFocused) {
+          svg.focus({ preventScroll: true });
+          svgFocused = true;
+        }
         target.setPointerCapture(event.pointerId);
         startHold(
           Number(target.dataset.col),
@@ -679,7 +691,7 @@
         // 1. Toggle Project Meta Visibility ('i')
         if (shortcutInputKey === "i") {
           event.preventDefault();
-          uiOverlay.classList.toggle("ui-hidden");
+          toggleUiOverlay();
           return;
         }
 
