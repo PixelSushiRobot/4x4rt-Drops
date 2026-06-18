@@ -4,9 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description"
-    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with a continuous fluid double celebration sequence.">
-  <title>Art for Life — World Blood Donor Day</title>
+  <meta name="description" content="Interactive art with 16 blocks for #Art4LifeTez event.">
+  <title>4x4rt Drops</title>
   <style>
     :root {
       --ink: #2d1f1a;
@@ -67,7 +66,7 @@
       box-shadow: inset 0 0 0 10px var(--focus);
     }
 
-    /* Target only the active red heart blocks */
+    /* Interactive block core targets */
     [data-key] {
       cursor: pointer;
     }
@@ -86,20 +85,20 @@
 
 <body>
   <main aria-labelledby="art-title">
-    <h1 id="art-title" class="sr-only">Art for Life — World Blood Donor Day</h1>
+    <h1 id="art-title" class="sr-only">4x4rt Drops — #Art4LifeTez</h1>
     <figure aria-describedby="art-description">
       <svg id="artwork" role="img" tabindex="0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"
         aria-labelledby="svg-title svg-description">
-        <title id="svg-title">Art for Life — an instant-response liquid pixel heart</title>
+        <title id="svg-title">4x4rt Drops — Fluid resource-preservation balance engine</title>
         <desc id="svg-description">
-          A pure-red pixel heart balancing lightness like fluid.
-          Press and hold any block to drain it to the canvas background color. Balance all cell colors to trigger a
-          continuous double celebration wave.
+          A liquid pixel heart constructed from exactly 16 blocks total.
+          Press and hold blocks to drain redness away into the matching canvas color. Equalize all blocks to trigger a
+          continuous double celebration shockwave.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
-        Press and hold any heart block to drain its redness down to the canvas color. Balancing all blocks to roughly
-        the same shade triggers a continuous double outward wave reset animation.
+        Press and hold blocks to bleed out values. Balancing all blocks to matching lightness values initializes a
+        continuous double wave reset loop.
       </figcaption>
     </figure>
   </main>
@@ -110,7 +109,7 @@
 
       const SVG_NS = "http://www.w3.org/2000/svg";
       const INK = "#2d1f1a";
-      const PAPER = "#fff8f0"; // Background Canvas color
+      const PAPER = "#fff8f0"; // Clean paper background canvas
       const SIZE = 1000;
       const CELL = 160;
       const BORDER = 10;
@@ -118,14 +117,12 @@
       const HOLD_DURATION = 1800;
       const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-      // Range boundaries for red cell liquid tracking
-      const MIN_L = 8;     // Rich deep crimson blood
-      const MAX_L = 97;    // Fully drained capacity limit
+      // Range limits for red structural tracking
+      const MIN_L = 8;     // Rich velvet blood tone
+      const MAX_L = 97;    // Fully empty, merging with canvas space
 
-      // Dynamic Balance Tolerance Span 
+      // Adaptive color-matching margin allowed before triggering success loops
       const BALANCE_THRESHOLD = 11.5;
-
-      // High-visibility wave color matching the background canvas paper color
       const WAVE_FLASH_COLOR = PAPER;
 
       const CELLS = [
@@ -140,7 +137,7 @@
       const svg = document.getElementById("artwork");
       const fillRects = new Map();
 
-      // State Trackers
+      // State Memory Registries
       let cellStates = {};
       let targetStates = {};
       let holdInterval = null;
@@ -152,10 +149,18 @@
       let isCelebrating = false;
       let initialDonorL = 0;
       let accumulatedGainedPool = 0;
-      let randomSeedValue = Math.random();
+
+      // Secondary fallback parameter initialized dynamically on balance loops
+      let continuousPlaySeedShift = null;
 
       function getSeedSource() {
+        // If a game-loop reset occurred, force the fallback dynamic runtime shift
+        if (continuousPlaySeedShift !== null) {
+          return `4x4rt-Drops:Art4LifeTez:NextSession:${continuousPlaySeedShift}`;
+        }
+
         const params = new URLSearchParams(window.location.search);
+        // Scrape incoming Teia wallet environments or platform parameters
         const parts = [
           params.get("viewer"),
           params.get("wallet"),
@@ -165,10 +170,11 @@
           params.get("seed")
         ].filter(Boolean);
 
+        // Locked layout if credentials exist, anonymous random fallback if missing
         if (parts.length > 0) {
           return parts.join(":");
         } else {
-          return `4x4rt-Drops:Art4LifeTez:PixelSushiRobot:${randomSeedValue}`;
+          return `4x4rt-Drops:Art4LifeTez:AnonymousSession:${Math.random()}`;
         }
       }
 
@@ -194,12 +200,12 @@
         };
       }
 
-      let random = mulberry32(xmur3(getSeedSource())());
+      let prng = mulberry32(xmur3(getSeedSource())());
 
       function cellX(col) { return offsetX + col * STEP; }
       function cellY(row) { return offsetY + row * STEP; }
 
-      // Custom structural rendering engine to transform red lightness into background canvas values as it empties
+      // Dynamic color converter preventing muddy artifacts near maximum lightness caps
       function getCellColorString(L) {
         if (L >= MAX_L) {
           return PAPER;
@@ -220,7 +226,6 @@
         }
       }
 
-      // Dynamic directly applied coloring mapping helper
       function setRawFillColor(key, cssColor) {
         const rect = fillRects.get(key);
         if (rect) {
@@ -228,7 +233,7 @@
         }
       }
 
-      // Synchronous Instant Catch-up Switch
+      // Synchronous instant layout snap
       function settleAllCellsNow() {
         activeTimers.forEach((timer) => window.clearTimeout(timer));
         activeTimers = [];
@@ -244,7 +249,7 @@
       function generatePalette() {
         CELLS.forEach(([col, row]) => {
           const key = `${col},${row}`;
-          cellStates[key] = MIN_L + random() * (80 - MIN_L);
+          cellStates[key] = MIN_L + prng() * (80 - MIN_L);
         });
         targetStates = { ...cellStates };
       }
@@ -263,7 +268,7 @@
         return rect;
       }
 
-      // Evaluates equilibrium across the resource pool to detect a successful balance event
+      // Monitors matrix variations across the structural landscape to watch for balance states
       function checkForColorBalanceSuccess() {
         const currentLightnessValues = Object.values(cellStates);
         if (currentLightnessValues.length === 0) return;
@@ -282,65 +287,63 @@
         pointerIsDown = false;
         activeKey = null;
 
-        // Terminate any standard propagation pipelines running concurrently
+        // Abort standard active input pipeline processes instantly
         activeTimers.forEach((timer) => window.clearTimeout(timer));
         activeTimers = [];
         successTimers.forEach((timer) => window.clearTimeout(timer));
         successTimers = [];
 
-        // Center point calculation for outward visual shockwave
         const centerCol = 2;
         const centerRow = 1.5;
 
-        // Visual orchestration parameters for balanced state
+        // Continuity tuning parameters
         const waveSpeed = 160;
-        const wave2Delay = 200; // Separation offset between wave 1 and wave 2
-        const colorHoldDuration = 180; // How long each block flashes its color before changing to the next step
+        const wave2Delay = 200;
+        const colorHoldDuration = 180;
 
-        // Generate the new upcoming palette ahead of time so cells can smoothly shift straight to it
-        randomSeedValue = Math.random();
-        random = mulberry32(xmur3(getSeedSource())());
+        // CRITICAL FOR LOGGED-IN USERS: Force-inject a unique dynamic seed shift factor for subsequent playthrough generation loops
+        continuousPlaySeedShift = Math.random();
+        prng = mulberry32(xmur3(getSeedSource())());
 
-        // Temporarily store the new targets without overriding current states yet
+        // Cache next sequence parameters safely ahead of time
         const nextStates = {};
         CELLS.forEach(([col, row]) => {
-          nextStates[`${col},${row}`] = MIN_L + random() * (80 - MIN_L);
+          nextStates[`${col},${row}`] = MIN_L + prng() * (80 - MIN_L);
         });
 
         CELLS.forEach(([col, row]) => {
           const key = `${col},${row}`;
           const distance = Math.hypot(col - centerCol, row - centerRow);
 
-          // Continuous timeline calculations (No static lingering delays)
+          // Cascading continuous timeline metrics (replaces static dead delays)
           const t1_arrive = REDUCED_MOTION ? 0 : Math.round(distance * waveSpeed);
           const t1_fade = t1_arrive + colorHoldDuration;
 
           const t2_arrive = t1_fade + wave2Delay;
           const t2_collapse = t2_arrive + colorHoldDuration;
 
-          // --- WAVE 1: Pure White Shockwave ---
+          // --- WAVE 1: Outward high-contrast Pure White flash ring ---
           const w1OnTimer = window.setTimeout(() => {
             setRawFillColor(key, "#ffffff");
           }, t1_arrive);
 
-          // Wave 1 trailing edge: Briefly blend with high-contrast ink frame values
+          // Wave 1 trailing edge: Contrast separation mapping injection
           const w1ClearTimer = window.setTimeout(() => {
             setRawFillColor(key, "rgba(45, 31, 26, 0.18)");
           }, t1_fade);
 
-          // --- WAVE 2: Paper Shockwave ---
+          // --- WAVE 2: Overlapping Canvas Paper shockwave ---
           const w2OnTimer = window.setTimeout(() => {
             setRawFillColor(key, PAPER);
           }, t2_arrive);
 
-          // --- CONTINUOUS COLLAPSE RESET ---
-          // Instead of waiting, cells directly transition back to their fresh randomized colors in a continuous wave
+          // --- FLUID CASING COLLAPSE RESET ---
+          // Closes directly into new dynamic configurations smoothly without pausing
           const collapseTimer = window.setTimeout(() => {
             cellStates[key] = nextStates[key];
             targetStates[key] = nextStates[key];
             setFill(key, cellStates[key]);
 
-            // If this is the final block in the calculation index sequence, safely restore user interaction flag
             if (key === `${CELLS[CELLS.length - 1][0]},${CELLS[CELLS.length - 1][1]}`) {
               isCelebrating = false;
             }
@@ -370,13 +373,11 @@
 
           targetStates[key] = targetL;
 
-          // Paper Wave Flash Arrival
           const arriveTimer = window.setTimeout(() => {
             if (isCelebrating) return;
             setRawFillColor(key, WAVE_FLASH_COLOR);
           }, arriveDelay);
 
-          // Settle securely into final state configuration
           const snapTimer = window.setTimeout(() => {
             if (isCelebrating) return;
             cellStates[key] = targetL;
@@ -405,7 +406,6 @@
         initialDonorL = cellStates[key];
         accumulatedGainedPool = 0;
 
-        // Instant click responsiveness adjustment step
         const instantClickStep = (MAX_L - initialDonorL) * 0.12;
         let steppedL = initialDonorL + instantClickStep;
         if (steppedL > MAX_L) steppedL = MAX_L;
@@ -415,7 +415,6 @@
         targetStates[key] = steppedL;
         setFill(key, steppedL);
 
-        // Long-press incremental calculation loop configuration
         window.clearInterval(holdInterval);
         holdInterval = window.setInterval(() => {
           if (isCelebrating) {
@@ -472,7 +471,7 @@
         Array.from(svg.querySelectorAll("rect")).forEach((rect) => rect.remove());
         fillRects.clear();
 
-        // Background canvas layout 
+        // Structural baseline background canvas layout
         addRect({
           x: 0,
           y: 0,
@@ -486,7 +485,7 @@
           const x = cellX(col);
           const y = cellY(row);
 
-          // Ink Framing Box
+          // Ink Framing Blocks (8 blocks total)
           addRect({
             x,
             y,
@@ -495,7 +494,7 @@
             fill: INK
           });
 
-          // Dynamic Color Core
+          // Dynamic Color Cores (8 punch-out blocks total = 16 blocks architectural budget)
           fillRects.set(key, addRect({
             x: x + BORDER,
             y: y + BORDER,
@@ -504,7 +503,7 @@
             fill: getCellColorString(cellStates[key])
           }));
 
-          // Interactive Pointer Hit-Box
+          // Transparent Interaction Target Detectors
           addRect({
             x,
             y,
@@ -520,7 +519,7 @@
 
       buildArtwork();
 
-      // Event Control Handling Logic
+      // Native Event Orchestration Handling
       svg.addEventListener("pointerdown", (event) => {
         const target = event.target.closest("[data-key]");
         if (!target) return;
@@ -538,13 +537,13 @@
       svg.addEventListener("pointercancel", releaseHold);
       svg.addEventListener("pointerleave", releaseHold);
 
-      // Accessibility Fallbacks
+      // Keyboard Fallbacks
       svg.addEventListener("keydown", (event) => {
         if (isCelebrating) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (CELLS.length > 0) {
-            const randomCell = CELLS[Math.floor(random() * CELLS.length)];
+            const randomCell = CELLS[Math.floor(prng() * CELLS.length)];
             const key = `${randomCell[0]},${randomCell[1]}`;
 
             settleAllCellsNow();
