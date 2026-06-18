@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with snappy ink-contrast waves.">
+    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with an extended epic celebration sequence.">
   <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
@@ -93,13 +93,13 @@
         <title id="svg-title">Art for Life — an instant-response liquid pixel heart</title>
         <desc id="svg-description">
           A pure-red pixel heart balancing lightness like fluid.
-          Press and hold any block to drain it to the canvas background color, sending a paper-colored ripple wave
-          instantly across the heart.
+          Press and hold any block to drain it to the canvas background color. Balance all cell colors to trigger an
+          epic celebration wave.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
-        Press and hold any heart block to completely drain its redness down to the canvas color, pulling blood away from
-        other cells via an immediate paper-colored wave.
+        Press and hold any heart block to drain its redness down to the canvas color. Balancing all blocks to roughly
+        the same shade triggers a dramatic, prolonged success reset animation.
       </figcaption>
     </figure>
   </main>
@@ -121,6 +121,9 @@
       // Range boundaries for red cell liquid tracking
       const MIN_L = 8;     // Rich deep crimson blood
       const MAX_L = 97;    // Fully drained capacity limit
+
+      // Maximum allowed variation difference between highest and lowest cell lightness to count as "balanced"
+      const BALANCE_THRESHOLD = 7.0;
 
       // High-visibility wave color matching the background canvas paper color
       const WAVE_FLASH_COLOR = PAPER;
@@ -144,9 +147,12 @@
       let holdStart = 0;
       let activeKey = null;
       let activeTimers = [];
+      let successTimers = [];
       let pointerIsDown = false;
+      let isCelebrating = false;
       let initialDonorL = 0;
       let accumulatedGainedPool = 0;
+      let randomSeedValue = Math.random();
 
       function getSeedSource() {
         const params = new URLSearchParams(window.location.search);
@@ -162,8 +168,7 @@
         if (parts.length > 0) {
           return parts.join(":");
         } else {
-          const freshRandomSuffix = Math.random().toString(36).substring(2, 11);
-          return `4x4rt-Drops:Art4LifeTez:PixelSushiRobot:${freshRandomSuffix}`;
+          return `4x4rt-Drops:Art4LifeTez:PixelSushiRobot:${randomSeedValue}`;
         }
       }
 
@@ -189,7 +194,7 @@
         };
       }
 
-      const random = mulberry32(xmur3(getSeedSource())());
+      let random = mulberry32(xmur3(getSeedSource())());
 
       function cellX(col) { return offsetX + col * STEP; }
       function cellY(row) { return offsetY + row * STEP; }
@@ -222,8 +227,7 @@
         }
       }
 
-      // Synchronous Instant Catch-up Switch:
-      // Clears running animation timeouts and updates data states to true target values instantly.
+      // Synchronous Instant Catch-up Switch
       function settleAllCellsNow() {
         activeTimers.forEach((timer) => window.clearTimeout(timer));
         activeTimers = [];
@@ -258,13 +262,70 @@
         return rect;
       }
 
+      // Evaluates equilibrium across the resource pool to detect a successful balance event
+      function checkForColorBalanceSuccess() {
+        const currentLightnessValues = Object.values(cellStates);
+        if (currentLightnessValues.length === 0) return;
+
+        const maxL = Math.max(...currentLightnessValues);
+        const minL = Math.min(...currentLightnessValues);
+        const delta = maxL - minL;
+
+        if (delta <= BALANCE_THRESHOLD) {
+          triggerSuccessCelebration();
+        }
+      }
+
+      function triggerSuccessCelebration() {
+        isCelebrating = true;
+        pointerIsDown = false;
+        activeKey = null;
+
+        // Terminate any standard propagation pipelines running concurrently
+        activeTimers.forEach((timer) => window.clearTimeout(timer));
+        activeTimers = [];
+        successTimers.forEach((timer) => window.clearTimeout(timer));
+        successTimers = [];
+
+        // Center point calculation for outward visual shockwave
+        const centerCol = 2;
+        const centerRow = 1.5;
+
+        CELLS.forEach(([col, row]) => {
+          const key = `${col},${row}`;
+          const distance = Math.hypot(col - centerCol, row - centerRow);
+
+          // SIGNIFICANTLY LENGTHENED SECTIONS:
+          // Slower, grander ripple outward delay step + substantially longer white void hang time
+          const waveArrival = REDUCED_MOTION ? 0 : Math.round(distance * 240);
+          const flashDuration = REDUCED_MOTION ? 400 : 1400;
+
+          // Outward propagation flash to white canvas void space
+          const flashOnTimer = window.setTimeout(() => {
+            setRawFillColor(key, "#ffffff");
+          }, waveArrival);
+
+          // Return transition point: Re-seed configuration parameters and snap back to organic values
+          const flashOffTimer = window.setTimeout(() => {
+            if (key === `${CELLS[CELLS.length - 1][0]},${CELLS[CELLS.length - 1][1]}`) {
+              randomSeedValue = Math.random();
+              random = mulberry32(xmur3(getSeedSource())());
+              generatePalette();
+              isCelebrating = false;
+            }
+            setFill(key, cellStates[key]);
+          }, waveArrival + flashDuration);
+
+          successTimers.push(flashOnTimer, flashOffTimer);
+        });
+      }
+
       function fireDrainageWave(sourceCol, sourceRow, speed, finalGainedPool, sourceKey) {
-        // Find recipient heart blocks
         const recipientCells = CELLS.filter(([col, row]) => `${col},${row}` !== sourceKey);
         if (recipientCells.length === 0) return;
 
-        // Resource Conservation Breakdown
         const tollPerRecipient = finalGainedPool / recipientCells.length;
+        let completedAnimationsCount = 0;
 
         recipientCells.forEach(([col, row]) => {
           const key = `${col},${row}`;
@@ -277,18 +338,24 @@
           const startL = cellStates[key];
           const targetL = Math.max(MIN_L, startL - tollPerRecipient);
 
-          // Update future target tracking instantly so click over-runs catch up cleanly
           targetStates[key] = targetL;
 
-          // Paper Wave Arrival
+          // Paper Wave Flash Arrival
           const arriveTimer = window.setTimeout(() => {
+            if (isCelebrating) return;
             setRawFillColor(key, WAVE_FLASH_COLOR);
           }, arriveDelay);
 
-          // Settle securely into the final state
+          // Settle securely into final state configuration
           const snapTimer = window.setTimeout(() => {
+            if (isCelebrating) return;
             cellStates[key] = targetL;
             setFill(key, targetL);
+
+            completedAnimationsCount++;
+            if (completedAnimationsCount === recipientCells.length) {
+              checkForColorBalanceSuccess();
+            }
           }, snapDelay);
 
           activeTimers.push(arriveTimer, snapTimer);
@@ -296,8 +363,8 @@
       }
 
       function startHold(col, row, key) {
-        // CRITICAL: Catch up any previous wave animation instantly.
-        // This stops rapid clicks from piling up half-finished animations.
+        if (isCelebrating) return;
+
         settleAllCellsNow();
 
         if (pointerIsDown && activeKey === key) return;
@@ -308,7 +375,7 @@
         initialDonorL = cellStates[key];
         accumulatedGainedPool = 0;
 
-        // Give single clicks an instant, reactive feedback step right away on down press
+        // Instant click responsiveness adjustment step
         const instantClickStep = (MAX_L - initialDonorL) * 0.12;
         let steppedL = initialDonorL + instantClickStep;
         if (steppedL > MAX_L) steppedL = MAX_L;
@@ -318,9 +385,13 @@
         targetStates[key] = steppedL;
         setFill(key, steppedL);
 
-        // Setup interval to continue draining smoothly if user transitions click into a long-press hold
+        // Long-press incremental calculation loop configuration
         window.clearInterval(holdInterval);
         holdInterval = window.setInterval(() => {
+          if (isCelebrating) {
+            window.clearInterval(holdInterval);
+            return;
+          }
           const elapsed = Date.now() - holdStart;
           const progress = Math.min(1, elapsed / HOLD_DURATION);
 
@@ -342,10 +413,13 @@
       }
 
       function releaseHold() {
-        if (holdInterval === null && !pointerIsDown) return;
-
         window.clearInterval(holdInterval);
         holdInterval = null;
+
+        if (isCelebrating || !pointerIsDown) {
+          pointerIsDown = false;
+          return;
+        }
         pointerIsDown = false;
 
         const key = activeKey;
@@ -355,7 +429,6 @@
 
         const [sourceCol, sourceRow] = key.split(",").map(Number);
 
-        // Unleash wave calculation instantly to keep regular clicking incredibly snappy
         if (totalGained > 0) {
           fireDrainageWave(sourceCol, sourceRow, 45, totalGained, key);
         }
@@ -401,7 +474,7 @@
             fill: getCellColorString(cellStates[key])
           }));
 
-          // Interactive Pointer Hit-Box (Only active pixels receive the hit cursor)
+          // Interactive Pointer Hit-Box
           addRect({
             x,
             y,
@@ -437,6 +510,7 @@
 
       // Accessibility Fallbacks
       svg.addEventListener("keydown", (event) => {
+        if (isCelebrating) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (CELLS.length > 0) {
