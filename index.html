@@ -207,8 +207,11 @@
       const INK = "#2d1f1a";
       const PAPER = "#fff8f0";
       const SIZE = 1000;
-      const CELL = 160;
-      const BORDER = 10;
+
+      // Updated layout dimensional matrix configs
+      const CELL = 100;     // Outer block size = 100
+      const BORDER = 10;    // Inner block size will automatically be 100 - (10 * 2) = 80
+
       const STEP = CELL - BORDER;
       const HOLD_DURATION = 1800;
       const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -226,6 +229,7 @@
         [2, 3]
       ];
 
+      // Computes fresh centering coordinates for the smaller 100px block matrix footprint
       const offsetX = Math.round((SIZE - (5 * CELL - 4 * BORDER)) / 2);
       const offsetY = Math.round((SIZE - (4 * CELL - 3 * BORDER)) / 2);
       const svg = document.getElementById("artwork");
