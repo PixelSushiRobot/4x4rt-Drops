@@ -5,13 +5,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Interactive pixel heart for World Blood Donor Day: Art for Life — giving blood is giving life.">
+    content="Interactive liquid pixel heart for World Blood Donor Day: Art for Life — a conservation-of-resource liquid system with paper-contrast waves.">
   <title>Art for Life — World Blood Donor Day</title>
   <style>
     :root {
       --ink: #2d1f1a;
       --paper: #fff8f0;
-      --focus: #c44d34;
+      --focus: hsl(0, 100%, 50%);
     }
 
     * {
@@ -57,7 +57,6 @@
       display: block;
       width: 100%;
       height: 100%;
-      cursor: pointer;
       outline: none;
       shape-rendering: crispEdges;
       touch-action: none;
@@ -66,6 +65,11 @@
 
     svg:focus-visible {
       box-shadow: inset 0 0 0 10px var(--focus);
+    }
+
+    /* Target only the active red heart blocks */
+    [data-key] {
+      cursor: pointer;
     }
 
     .sr-only {
@@ -86,15 +90,16 @@
     <figure aria-describedby="art-description">
       <svg id="artwork" role="img" tabindex="0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"
         aria-labelledby="svg-title svg-description">
-        <title id="svg-title">Art for Life — an interactive pixel heart</title>
+        <title id="svg-title">Art for Life — a paper-contrast liquid pixel heart</title>
         <desc id="svg-description">
-          A warm, blocky heart built from life-giving colors.
-          Press and hold any block to charge it, then release to send a joyful pulse through the artwork.
-          Giving blood is giving life — celebrate World Blood Donor Day.
+          A pure-red pixel heart balancing lightness like fluid.
+          Press and hold any block to drain it to the canvas background color, sending a paper-colored ripple wave
+          across the heart.
         </desc>
       </svg>
       <figcaption id="art-description" class="sr-only">
-        Press and hold any heart block to alter its color and release a wave through the artwork.
+        Press and hold any heart block to completely drain its redness down to the canvas color, pulling blood away from
+        other cells via a paper-colored wave.
       </figcaption>
     </figure>
   </main>
@@ -105,13 +110,20 @@
 
       const SVG_NS = "http://www.w3.org/2000/svg";
       const INK = "#2d1f1a";
-      const PAPER = "#fff8f0";
+      const PAPER = "#fff8f0"; // Background Canvas color
       const SIZE = 1000;
       const CELL = 160;
       const BORDER = 10;
       const STEP = CELL - BORDER;
-      const HOLD_DURATION = 2000;
+      const HOLD_DURATION = 1800;
       const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // Range boundaries for red cell liquid tracking
+      const MIN_L = 8;     // Rich deep crimson blood
+      const MAX_L = 97;    // Fully drained capacity limit
+
+      // High-visibility wave color matching the background canvas paper color
+      const WAVE_FLASH_COLOR = PAPER;
 
       const CELLS = [
         [1, 0], [3, 0],
@@ -124,15 +136,16 @@
       const offsetY = Math.round((SIZE - (4 * CELL - 3 * BORDER)) / 2);
       const svg = document.getElementById("artwork");
       const fillRects = new Map();
-      const hitAreas = new Map();
 
-      let baseColors = {};
+      // State Trackers
+      let cellStates = {};
       let holdInterval = null;
       let holdStart = 0;
-      let chargeAmount = 0;
       let activeKey = null;
       let activeTimers = [];
       let pointerIsDown = false;
+      let initialDonorL = 0;
+      let accumulatedGainedPool = 0;
 
       function getSeedSource() {
         const params = new URLSearchParams(window.location.search);
@@ -145,9 +158,13 @@
           params.get("seed")
         ].filter(Boolean);
 
-        return parts.length > 0
-          ? parts.join(":")
-          : "4x4rt-Drops:Art4LifeTez:PixelSushiRobot";
+        // If URL parameters are present, use them. Otherwise, generate a fresh random seed string on every reload.
+        if (parts.length > 0) {
+          return parts.join(":");
+        } else {
+          const freshRandomSuffix = Math.random().toString(36).substring(2, 11);
+          return `4x4rt-Drops:Art4LifeTez:PixelSushiRobot:${freshRandomSuffix}`;
+        }
       }
 
       function xmur3(source) {
@@ -174,105 +191,44 @@
 
       const random = mulberry32(xmur3(getSeedSource())());
 
-      function cellX(col) {
-        return offsetX + col * STEP;
-      }
+      function cellX(col) { return offsetX + col * STEP; }
+      function cellY(row) { return offsetY + row * STEP; }
 
-      function cellY(row) {
-        return offsetY + row * STEP;
-      }
-
-      function hexToRgb(hex) {
-        const value = hex.replace("#", "");
-        return [
-          parseInt(value.slice(0, 2), 16),
-          parseInt(value.slice(2, 4), 16),
-          parseInt(value.slice(4, 6), 16)
-        ];
-      }
-
-      function rgbToHex(red, green, blue) {
-        return "#" + [red, green, blue]
-          .map((value) => Math.max(0, Math.min(255, Math.round(value))))
-          .map((value) => value.toString(16).padStart(2, "0"))
-          .join("");
-      }
-
-      function lerpColor(start, end, amount) {
-        const [startRed, startGreen, startBlue] = hexToRgb(start);
-        const [endRed, endGreen, endBlue] = hexToRgb(end);
-
-        return rgbToHex(
-          startRed + (endRed - startRed) * amount,
-          startGreen + (endGreen - startGreen) * amount,
-          startBlue + (endBlue - startBlue) * amount
-        );
-      }
-
-      /**
-       * CRITICAL COLOR RE-ENGINEERING:
-       * Instead of mixing hexes (which creates mud/brown), we directly recalculate
-       * the RGB channels based on pure Red laws. Green and Blue are hard-capped low
-       * to stay completely away from pink, orange, or brown.
-       */
-
-      // Donating cell empties out, spiking into an un-diluted pure electric neon red
-      function giveLifeShift(hex, amount = 1) {
-        const [r, g, b] = hexToRgb(hex);
-        // Push Red straight to the maximum ceil, drop green/blue to clean laser floors
-        const targetR = r + (255 - r) * amount;
-        const targetG = g * (1 - amount);
-        const targetB = b * (1 - amount);
-        return rgbToHex(targetR, targetG, targetB);
-      }
-
-      // Absorbing cell packs in the blood, dropping the red channel low, 
-      // but completely draining green/blue to maintain pristine crimson saturation.
-      function absorbLifeShift(hex, amount) {
-        const [r, g, b] = hexToRgb(hex);
-
-        // Drop the red channel down to form a rich dark blood tone (capped at floor 65)
-        const targetR = Math.max(65, r - (r - 65) * amount * 0.65);
-        // Aggressively wipe green and blue to protect the pure red tone from rotting into brown
-        const targetG = Math.max(0, g - (g * amount * 0.9));
-        const targetB = Math.max(0, b - (b * amount * 0.9));
-
-        return rgbToHex(targetR, targetG, targetB);
-      }
-
-      function rand(min, max) {
-        return min + random() * (max - min);
-      }
-
-      // Initialized seeds generate gorgeous balanced ranges of bright and velvet reds
-      function randomBrightRed() {
-        const band = random();
-
-        // 1. Pure Electric Red
-        if (band < 0.20) {
-          return rgbToHex(rand(245, 255), 0, 0);
+      // Custom structural rendering engine to transform red lightness into background canvas values as it empties
+      function getCellColorString(L) {
+        if (L >= MAX_L) {
+          return PAPER; // Perfect transparency match at empty state limit
         }
-        // 2. Ruby Mid-Tone Red
-        if (band < 0.40) {
-          return rgbToHex(rand(210, 235), 0, rand(4, 10));
+        if (L > 85) {
+          // Progressively lean towards the warm linen tint of the canvas background (#fff8f0) instead of pure white
+          const factor = (L - 85) / (MAX_L - 85);
+          const currentHue = Math.round(0 + (34 * factor));
+          const currentLightness = (85 + (12 * factor)).toFixed(1);
+          return `hsl(${currentHue}, 100%, ${currentLightness}%)`;
         }
-        // 3. Deep Velvet Crimson
-        if (band < 0.60) {
-          return rgbToHex(rand(140, 175), 0, rand(4, 8));
+        return `hsl(0, 100%, ${L}%)`;
+      }
+
+      function setFill(key, L) {
+        const rect = fillRects.get(key);
+        if (rect) {
+          rect.setAttribute("fill", getCellColorString(L));
         }
-        // 4. Heavy Blood Maroon
-        if (band < 0.80) {
-          return rgbToHex(rand(95, 130), 0, rand(2, 6));
+      }
+
+      function setRawFillColor(key, cssColor) {
+        const rect = fillRects.get(key);
+        if (rect) {
+          rect.setAttribute("fill", cssColor);
         }
-        // 5. Vivid Cherry
-        return rgbToHex(rand(235, 255), rand(2, 8), rand(4, 12));
       }
 
       function generatePalette() {
-        return CELLS.reduce((colors, [col, row]) => {
-          colors[`${col},${row}`] = randomBrightRed();
-          return colors;
-        }, {});
+        CELLS.forEach(([col, row]) => {
+          const key = `${col},${row}`;
+          // Generate completely randomized initial red lightness states spanning a wide spectrum using our reload seed
+          cellStates[key] = MIN_L + random() * (80 - MIN_L);
+        });
       }
 
       function createSvgElement(tagName, attributes = {}) {
@@ -289,45 +245,41 @@
         return rect;
       }
 
-      function setFill(key, color) {
-        const rect = fillRects.get(key);
-        if (rect) {
-          rect.setAttribute("fill", color);
-        }
-      }
-
       function cancelTimers() {
         activeTimers.forEach((timer) => window.clearTimeout(timer));
         activeTimers = [];
       }
 
-      function fireDonationWave(sourceCol, sourceRow, speed, charge) {
+      function fireDrainageWave(sourceCol, sourceRow, speed, finalGainedPool) {
         cancelTimers();
-        const donationImpact = Math.max(0.20, charge);
 
-        CELLS.forEach(([col, row]) => {
+        const recipientCells = CELLS.filter(([col, row]) => `${col},${row}` !== activeKey);
+        if (recipientCells.length === 0) return;
+
+        // Resource Conservation Law: Split the total lightness gained evenly as a loss from others
+        const tollPerRecipient = finalGainedPool / recipientCells.length;
+
+        recipientCells.forEach(([col, row]) => {
           const key = `${col},${row}`;
-
-          if (col === sourceCol && row === sourceRow) {
-            return;
-          }
-
           const distance = Math.hypot(col - sourceCol, row - sourceRow);
+
           const arriveDelay = REDUCED_MOTION ? 0 : Math.round(distance * speed);
-          const flashDuration = REDUCED_MOTION ? 120 : Math.round(speed * 1.2) + 120;
+          const flashDuration = REDUCED_MOTION ? 80 : 180;
           const snapDelay = arriveDelay + flashDuration;
 
+          const startL = cellStates[key];
+          const targetL = Math.max(MIN_L, startL - tollPerRecipient);
+
+          // Paper Wave Arrival
           const arriveTimer = window.setTimeout(() => {
-            // Flash color curves deep down during wave front passage
-            const waveColor = absorbLifeShift(baseColors[key], donationImpact * 1.4);
-            setFill(key, waveColor);
+            // Flash paper color across the ripple front to simulate an empty void pulse
+            setRawFillColor(key, WAVE_FLASH_COLOR);
           }, arriveDelay);
 
+          // Settle securely into the newly calculated value
           const snapTimer = window.setTimeout(() => {
-            // Commit permanent absorption shifts securely
-            const finalDarkerColor = absorbLifeShift(baseColors[key], donationImpact);
-            baseColors[key] = finalDarkerColor;
-            setFill(key, finalDarkerColor);
+            cellStates[key] = targetL;
+            setFill(key, targetL);
           }, snapDelay);
 
           activeTimers.push(arriveTimer, snapTimer);
@@ -335,60 +287,67 @@
       }
 
       function startHold(col, row, key) {
-        if (pointerIsDown && activeKey === key) {
-          return;
-        }
+        if (pointerIsDown && activeKey === key) return;
 
         cancelTimers();
         pointerIsDown = true;
         activeKey = key;
-        chargeAmount = 0;
         holdStart = Date.now();
+        initialDonorL = cellStates[key];
+        accumulatedGainedPool = 0;
 
         window.clearInterval(holdInterval);
 
         holdInterval = window.setInterval(() => {
-          chargeAmount = Math.min(1, (Date.now() - holdStart) / HOLD_DURATION);
-          setFill(key, giveLifeShift(baseColors[key], chargeAmount));
-        }, REDUCED_MOTION ? 80 : 30);
+          const elapsed = Date.now() - holdStart;
+          const progress = Math.min(1, elapsed / HOLD_DURATION);
+
+          // Drive cleanly up to the transparency ceiling
+          const maxGrowthHeadroom = MAX_L - initialDonorL;
+          const currentGainTarget = maxGrowthHeadroom * progress;
+
+          let updatedDonorL = initialDonorL + currentGainTarget;
+          if (updatedDonorL > MAX_L) updatedDonorL = MAX_L;
+
+          // Track fluid transaction
+          accumulatedGainedPool = updatedDonorL - initialDonorL;
+          cellStates[key] = updatedDonorL;
+          setFill(key, updatedDonorL);
+
+          if (progress >= 1) {
+            window.clearInterval(holdInterval);
+          }
+        }, REDUCED_MOTION ? 80 : 16);
       }
 
       function releaseHold() {
-        if (holdInterval === null) {
-          pointerIsDown = false;
-          return;
-        }
+        if (holdInterval === null && !pointerIsDown) return;
 
         window.clearInterval(holdInterval);
         holdInterval = null;
         pointerIsDown = false;
 
         const key = activeKey;
-        const charge = chargeAmount;
+        const totalGained = accumulatedGainedPool;
 
-        activeKey = null;
-        chargeAmount = 0;
-
-        if (!key) {
-          return;
-        }
+        if (!key) return;
 
         const [sourceCol, sourceRow] = key.split(",").map(Number);
 
-        // Lock donor cell cleanly into maximum electric brightness
-        const finalDonorColor = giveLifeShift(baseColors[key], Math.max(0.20, charge));
-        baseColors[key] = finalDonorColor;
-        setFill(key, finalDonorColor);
+        if (totalGained > 0) {
+          fireDrainageWave(sourceCol, sourceRow, 45, totalGained);
+        }
 
-        fireDonationWave(sourceCol, sourceRow, 45, charge);
+        activeKey = null;
+        accumulatedGainedPool = 0;
       }
 
       function buildArtwork() {
-        baseColors = generatePalette();
+        generatePalette();
         Array.from(svg.querySelectorAll("rect")).forEach((rect) => rect.remove());
         fillRects.clear();
-        hitAreas.clear();
 
+        // Background canvas layout 
         addRect({
           x: 0,
           y: 0,
@@ -402,6 +361,7 @@
           const x = cellX(col);
           const y = cellY(row);
 
+          // Ink Framing Box
           addRect({
             x,
             y,
@@ -410,15 +370,17 @@
             fill: INK
           });
 
+          // Dynamic Color Core
           fillRects.set(key, addRect({
             x: x + BORDER,
             y: y + BORDER,
             width: CELL - BORDER * 2,
             height: CELL - BORDER * 2,
-            fill: baseColors[key]
+            fill: getCellColorString(cellStates[key])
           }));
 
-          const hitArea = addRect({
+          // Interactive Pointer Hit-Box (Only these elements get pointer cursors via CSS)
+          addRect({
             x,
             y,
             width: CELL,
@@ -428,19 +390,15 @@
             "data-col": col,
             "data-row": row
           });
-
-          hitArea.style.cursor = "pointer";
-          hitAreas.set(key, hitArea);
         });
       }
 
       buildArtwork();
 
+      // Event Control Handling Logic
       svg.addEventListener("pointerdown", (event) => {
         const target = event.target.closest("[data-key]");
-        if (!target) {
-          return;
-        }
+        if (!target) return;
 
         event.preventDefault();
         target.setPointerCapture(event.pointerId);
@@ -455,23 +413,26 @@
       svg.addEventListener("pointercancel", releaseHold);
       svg.addEventListener("pointerleave", releaseHold);
 
+      // Accessibility Fallbacks
       svg.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (CELLS.length > 0) {
-            const centerCol = CELLS.reduce((s, [, r]) => s + r, 0) / CELLS.length;
-            const centerRow = CELLS.reduce((s, [, r]) => s + r, 0) / CELLS.length;
-            const nearest = CELLS.reduce((best, cell) => {
-              const d = Math.hypot(cell[1] - centerRow, cell[0] - centerCol);
-              return d < best.dist ? { cell, dist: d } : best;
-            }, { cell: CELLS[0], dist: Infinity }).cell;
+            const randomCell = CELLS[Math.floor(random() * CELLS.length)];
+            const key = `${randomCell[0]},${randomCell[1]}`;
 
-            const keyKey = `${nearest[0]},${nearest[1]}`;
-            const keyDonorColor = giveLifeShift(baseColors[keyKey], 0.5);
-            baseColors[keyKey] = keyDonorColor;
-            setFill(keyKey, keyDonorColor);
+            activeKey = key;
+            const currentL = cellStates[key];
+            const capacity = MAX_L - currentL;
+            const stepGain = capacity * 0.60;
+            const finalDonorL = Math.min(MAX_L, currentL + stepGain);
+            const absoluteGained = finalDonorL - currentL;
 
-            fireDonationWave(nearest[0], nearest[1], 45, 0.4);
+            cellStates[key] = finalDonorL;
+            setFill(key, finalDonorL);
+
+            fireDrainageWave(randomCell[0], randomCell[1], 45, absoluteGained);
+            activeKey = null;
           }
         }
       });
