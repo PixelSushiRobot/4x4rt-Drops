@@ -12,6 +12,12 @@ Interactive art for the #Art4LifeTez event.
 
 Open `index.html` in your browser (double-click or serve from a static host).
 
+## Preview
+
+View the live preview at:
+
+https://pixelsushirobot.github.io/4x4rt-Drops/
+
 ## Contributing
 
 Contributions are welcome. Please open issues or pull requests on the
