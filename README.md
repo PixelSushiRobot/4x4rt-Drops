@@ -12,14 +12,6 @@ Interactive art for the #Art4LifeTez event.
 
 Open `index.html` in your browser (double-click or serve from a static host).
 
-## GitHub Pages
-
-This repository includes a GitHub Pages workflow that publishes the site from the repository root on each push to `main`.
-
-Once the workflow runs, the preview will be available at:
-
-https://PixelSushiRobot.github.io/4x4rt-Drops/
-
 ## Contributing
 
 Contributions are welcome. Please open issues or pull requests on the
